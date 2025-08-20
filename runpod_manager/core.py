@@ -349,7 +349,13 @@ class PodManager:
             pod_name = self.config.get_pod_name(pod_type, int(time.time()))
             image_name_base = self.config.get('IMAGE_NAME_BASE')
             if image_name_base:
-                image_name = image_name_base + ':' + pod_type
+                # Check if the base image already has a tag
+                if ':' in image_name_base:
+                    # Image already has a tag, use as-is
+                    image_name = image_name_base
+                else:
+                    # No tag, append pod_type as tag
+                    image_name = image_name_base + ':' + pod_type
             else:
                 # Fallback to a default image if none specified
                 image_name = 'runpod/pytorch:latest'
