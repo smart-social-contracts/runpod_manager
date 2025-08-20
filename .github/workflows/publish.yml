@@ -1,0 +1,149 @@
+name: Publish to PyPI
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 0.1.1)'
+        required: true
+        type: string
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install bump2version
+
+    - name: Configure git
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+
+    - name: Bump version
+      id: bump
+      run: |
+        if [ "${{ github.event.inputs.version }}" != "" ]; then
+          NEW_VERSION="${{ github.event.inputs.version }}"
+          bump2version --new-version $NEW_VERSION patch
+        else
+          bump2version ${{ github.event.inputs.bump_type }}
+          NEW_VERSION=$(python -c "import runpod_manager; print(runpod_manager.__version__)")
+        fi
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "New version: $NEW_VERSION"
+
+    - name: Commit version bump
+      run: |
+        git add .
+        git commit -m "Bump version to ${{ steps.bump.outputs.new_version }}"
+        git push
+
+  test:
+    needs: bump-version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: main
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-mock requests-mock
+        pip install -e .
+
+    - name: Run tests
+      run: |
+        python -m pytest tests/ -v
+
+    - name: Test CLI
+      run: |
+        runpod-manager --help
+
+  publish:
+    needs: [bump-version, test]
+    runs-on: ubuntu-latest
+    environment: pypi
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: main
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Build package
+      run: |
+        python -m build
+
+    - name: Check package
+      run: |
+        twine check dist/*
+
+    - name: Publish to PyPI
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      run: |
+        twine upload dist/*
+
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ needs.bump-version.outputs.new_version }}
+        release_name: Release v${{ needs.bump-version.outputs.new_version }}
+        body: |
+          Release v${{ needs.bump-version.outputs.new_version }}
+          
+          Changes in this release:
+          - Package published to PyPI
+          - Install with: `pip install runpod_manager==${{ needs.bump-version.outputs.new_version }}`
+        draft: false
+        prerelease: false
