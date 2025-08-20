@@ -347,9 +347,12 @@ class PodManager:
         
             # Create pod using RunPod SDK - try each GPU until one succeeds
             pod_name = self.config.get_pod_name(pod_type, int(time.time()))
-            image_name = self.config.get('IMAGE_NAME_BASE')
-            if image_name:
-                image_name = image_name + ':' + pod_type
+            image_name_base = self.config.get('IMAGE_NAME_BASE')
+            if image_name_base:
+                image_name = image_name_base + ':' + pod_type
+            else:
+                # Fallback to a default image if none specified
+                image_name = 'runpod/pytorch:latest'
             container_disk = int(self.config.get('CONTAINER_DISK', '20'))
             
             self._print(f"Creating pod: {pod_name}")
@@ -379,8 +382,8 @@ class PodManager:
                     if self.config.get('TEMPLATE_ID'):
                         pod_params['template_id'] = self.config.get('TEMPLATE_ID')
                     
-                    if image_name:
-                        pod_params['image_name'] = image_name
+                    # Always include image_name - it's required
+                    pod_params['image_name'] = image_name
                     
                     if self.config.get('NETWORK_VOLUME_ID'):
                         pod_params['network_volume_id'] = self.config.get('NETWORK_VOLUME_ID')

@@ -46,6 +46,7 @@ class PodConfig:
         config.setdefault('GPU_COUNT', '1')
         config.setdefault('SUPPORT_PUBLIC_IP', 'true')
         config.setdefault('START_SSH', 'true')
+        config.setdefault('IMAGE_NAME_BASE', 'runpod/pytorch')
         
         config.update(kwargs)
         
